@@ -21,7 +21,7 @@ def _poisson(lmbd):
 
 
 # Transfers gradients from thread-specific model to shared model
-def _transfer_grads_to_shared_model(model, shared_model, model_gpu_id=0):  # todo 用于 debug，
+def _transfer_grads_to_shared_model(model, shared_model, model_gpu_id=-1):
     for param, shared_param in zip(model.parameters(), shared_model.parameters()):
         if shared_param.grad is not None:
             return
@@ -50,7 +50,7 @@ def _update_networks(args, T, model, shared_model, shared_average_model, loss, o
     nn.utils.clip_grad_norm_(model.parameters(), args.max_gradient_norm)
 
     # Transfer gradients to shared model and update
-    _transfer_grads_to_shared_model(model, shared_model)
+    _transfer_grads_to_shared_model(model, shared_model, model_gpu_id=0 if args.use_cuda else -1)
     optimiser.step()
     if args.lr_decay:
         # Linearly decay learning rate
