@@ -32,3 +32,5 @@ References
 
 [1] [Sample Efficient Actor-Critic with Experience Replay](https://arxiv.org/abs/1611.01224)  
 [2] [Asynchronous Methods for Deep Reinforcement Learning](https://arxiv.org/abs/1602.01783)  
+[3] [GPU 部分参考](https://github.com/dgriff777/rl_a3c_pytorch)
+

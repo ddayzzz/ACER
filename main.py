@@ -46,67 +46,72 @@ parser.add_argument('--render', action='store_true', help='Render evaluation age
 parser.add_argument('--name', type=str, default='results', help='Save folder')
 parser.add_argument('--env', type=str, default='CartPole-v1',help='environment name')
 
+# 测试 gpu
+parser.add_argument('--use_cuda', type=bool, default=True, help='是否启用 CUDA 设备')
+
 
 if __name__ == '__main__':
-  # BLAS setup
-  os.environ['OMP_NUM_THREADS'] = '1'
-  os.environ['MKL_NUM_THREADS'] = '1'
+    # BLAS setup
+    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['MKL_NUM_THREADS'] = '1'
 
-  # Setup
-  args = parser.parse_args()
-  # Creating directories.
-  save_dir = os.path.join('results', args.name)  
-  if not os.path.exists(save_dir):
-    os.makedirs(save_dir)  
-  print(' ' * 26 + 'Options')
+    # Setup
+    args = parser.parse_args()
+    # Creating directories.
+    save_dir = os.path.join('results', args.name)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    print(' ' * 26 + 'Options')
 
-  # Saving parameters
-  with open(os.path.join(save_dir, 'params.txt'), 'w') as f:
-    for k, v in vars(args).items():
-      print(' ' * 26 + k + ': ' + str(v))
-      f.write(k + ' : ' + str(v) + '\n')
-  # args.env = 'CartPole-v1'  # TODO: Remove hardcoded environment when code is more adaptable
-  # mp.set_start_method(platform.python_version()[0] == '3' and 'spawn' or 'fork')  # Force true spawning (not forking) if available
-  torch.manual_seed(args.seed)
-  T = Counter()  # Global shared counter
-  gym.logger.set_level(gym.logger.ERROR)  # Disable Gym warnings
+    # Saving parameters
+    with open(os.path.join(save_dir, 'params.txt'), 'w') as f:
+        for k, v in vars(args).items():
+            print(' ' * 26 + k + ': ' + str(v))
+            f.write(k + ' : ' + str(v) + '\n')
+    # args.env = 'CartPolgyme-v1'  # TODO: Remove hardcoded environment when code is more adaptable
+    # mp.set_start_method(platform.python_version()[0] == '3' and 'spawn' or 'fork')  # Force true spawning (not forking) if available
+    torch.manual_seed(args.seed)
+    if args.use_cuda:
+        torch.cuda.manual_seed(args.seed)
+    T = Counter()  # Global shared counter
+    gym.logger.set_level(gym.logger.ERROR)  # Disable Gym warnings
 
-  # Create shared network
-  env = gym.make(args.env)
-  shared_model = ActorCritic(env.observation_space, env.action_space, args.hidden_size)
-  shared_model.share_memory()
-  if args.model and os.path.isfile(args.model):
-    # Load pretrained weights
-    shared_model.load_state_dict(torch.load(args.model))
-  # Create average network
-  shared_average_model = ActorCritic(env.observation_space, env.action_space, args.hidden_size)
-  shared_average_model.load_state_dict(shared_model.state_dict())
-  shared_average_model.share_memory()
-  for param in shared_average_model.parameters():
-    param.requires_grad = False
-  # Create optimiser for shared network parameters with shared statistics
-  optimiser = SharedRMSprop(shared_model.parameters(), lr=args.lr, alpha=args.rmsprop_decay)
-  optimiser.share_memory()
-  env.close()
+    # Create shared network
+    env = gym.make(args.env)
+    shared_model = ActorCritic(env.observation_space, env.action_space, args.hidden_size)
+    shared_model.share_memory()
+    if args.model and os.path.isfile(args.model):
+        # Load pretrained weights
+        shared_model.load_state_dict(torch.load(args.model))
+    # Create average network
+    shared_average_model = ActorCritic(env.observation_space, env.action_space, args.hidden_size)
+    shared_average_model.load_state_dict(shared_model.state_dict())
+    shared_average_model.share_memory()
+    for param in shared_average_model.parameters():
+        param.requires_grad = False
+    # Create optimiser for shared network parameters with shared statistics
+    optimiser = SharedRMSprop(shared_model.parameters(), lr=args.lr, alpha=args.rmsprop_decay)
+    optimiser.share_memory()
+    env.close()
 
-  fields = ['t', 'rewards', 'avg_steps', 'time']
-  with open(os.path.join(save_dir, 'test_results.csv'), 'w') as f:
-    writer = csv.writer(f)
-    writer.writerow(fields)
-  # Start validation agent
-  processes = []
-  p = mp.Process(target=test, args=(0, args, T, shared_model))
-  p.start()
-  processes.append(p)
+    fields = ['t', 'rewards', 'avg_steps', 'time']
+    with open(os.path.join(save_dir, 'test_results.csv'), 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(fields)
+    # Start validation agent
+    processes = []
+    p = mp.Process(target=test, args=(0, args, T, shared_model))
+    p.start()
+    processes.append(p)
 
-  if not args.evaluate:
-    # Start training agents
-    for rank in range(1, args.num_processes + 1):
-      p = mp.Process(target=train, args=(rank, args, T, shared_model, shared_average_model, optimiser))
-      p.start()
-      print('Process ' + str(rank) + ' started')
-      processes.append(p)
+    if not args.evaluate:
+        # Start training agents
+        for rank in range(1, args.num_processes + 1):
+            p = mp.Process(target=train, args=(rank, args, T, shared_model, shared_average_model, optimiser))
+            p.start()
+            print('Process ' + str(rank) + ' started')
+            processes.append(p)
 
-  # Clean up
-  for p in processes:
-    p.join()
+    # Clean up
+    for p in processes:
+        p.join()
