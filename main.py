@@ -14,6 +14,16 @@ from test import test
 from utils import Counter
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 parser = argparse.ArgumentParser(description='ACER')
 parser.add_argument('--seed', type=int, default=123, help='Random seed')
 parser.add_argument('--num-processes', type=int, default=6, metavar='N', help='Number of training async agents (does not include single validation agent)')
@@ -47,7 +57,7 @@ parser.add_argument('--name', type=str, default='results', help='Save folder')
 parser.add_argument('--env', type=str, default='CartPole-v1',help='environment name')
 
 # 测试 gpu
-parser.add_argument('--use_cuda', type=bool, default=True, help='是否启用 CUDA 设备')
+parser.add_argument('--use_cuda', type=str2bool, default=True, help='是否启用 CUDA 设备')
 
 
 if __name__ == '__main__':
